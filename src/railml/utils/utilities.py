@@ -27,3 +27,9 @@ def get_track_elements(graph, xml_node, label, relation, track_node, projection)
         graph.create(track_element_node)
         relationship = Relationship(track_node, relation, track_element_node)
         graph.create(relationship)
+
+def get_track_switches():
+    pass
+
+def get_track_crossings():
+    pass
