@@ -50,7 +50,7 @@ def import_railml():
 
         for crossing in track_crossings:
             # create crossing nodes and connect them to the track
-            get_track_crossings(graph, crossing, track_node, _EPS)
+            get_track_crossings(graph, crossing, track_node, _EPSG)
 
         # track begin connections
         b_connection = track.xpath("rail:trackTopology/rail:trackBegin//rail:connection", namespaces=DEFAULT_NAMESPACE)
