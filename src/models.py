@@ -1,6 +1,9 @@
 from py2neo import Graph
 
-NEO4J_USERNAME = "neo4j" 
+#
+# database credentials
+#
+NEO4J_USERNAME = "neo4j"
 NEO4J_PASSWORD = "test"
 NEO4J_PORT = "7474"
 NEO4J_HOST = "localhost"

@@ -4,10 +4,22 @@ from lxml import etree
 from py2neo import Node, Relationship, NodeSelector
 from utils.variables import DEFAULT_NAMESPACE, OCS_ELEMENTS, TRACK_ELEMENTS
 from utils.spatial import extract_tracks_coords, extract_elements_coords
-from utils.utilities import get_track_elements, topology_node
+from utils.helpers import get_track_elements, topology_node, get_track_crossings, get_track_switches
 
 railml = Blueprint('railml', __name__, url_prefix='/api/v1/railml')
 
+#
+#
+# Railml file import. POST request.
+# Parameters: file (xml file), epsg (string epsg code)
+# Returns: number of extracted track_switches
+#
+# Extracts tracks and all related elements like switches, connections, ocs etc.
+# Only from INFRASTRUCTURE schema
+# Extracts coordinates for each feature if they are there. Converts coords to WGS84::4326 from specified EPSG
+# Creates connected graph - there is always a path between two nodes
+#
+#
 @railml.route("/import", methods=["POST"])
 def import_railml():
     _EPSG = request.form["epsg"]
@@ -32,54 +44,13 @@ def import_railml():
 
         for switch in track_switches:
             # create switch nodes and connect them to the track
-            switch_attributes = switch.attrib
-
-            switch_coords = switch.xpath("rail:geoCoord/@coord", namespaces=DEFAULT_NAMESPACE)
-            if len(switch_coords):
-                wkt_geometry = extract_elements_coords(switch_coords[0], _EPSG)
-                switch_attributes['geometry'] = wkt_geometry
-
-            switch_node = Node("Switch", **switch_attributes)
-
-            graph.create(switch_node)
-
-            relationship = Relationship(track_node, "HAS_SWITCH", switch_node)
-
-            graph.create(relationship)
-
-            connection_attributes = switch.xpath("rail:connection", namespaces=DEFAULT_NAMESPACE)[0].attrib
-            connection_node = Node("Connection", **connection_attributes)
-            graph.create(connection_node)
-            connection_relationship = Relationship(switch_node, "HAS_CONNECTION", connection_node)
-            graph.create(connection_relationship)
+            get_track_switches(graph, switch, track_node, _EPSG)
 
         track_crossings = track.xpath("rail:trackTopology/rail:connections//rail:crossing", namespaces=DEFAULT_NAMESPACE) # extract crossings
 
         for crossing in track_crossings:
             # create crossing nodes and connect them to the track
-            crossing_attributes = crossing.attrib
-
-            crossing_coords = crossing.xpath("rail:geoCoord/@coord", namespaces=DEFAULT_NAMESPACE)
-            if len(crossing_coords):
-                wkt_geometry = extract_elements_coords(crossing_coords[0], _EPSG)
-                crossing_attributes['geometry'] = wkt_geometry
-
-            crossing_node = Node("Crossing", **crossing_attributes)
-
-            graph.create(crossing_node)
-
-            relationship = Relationship(track_node, "HAS_CROSSING", crossing_node)
-
-            graph.create(relationship)
-
-            crossing_connections = crossing.xpath("rail:connection", namespaces=DEFAULT_NAMESPACE)
-
-            for crossing_connection in crossing_connections:
-                connection_attributes = crossing_connection.attrib
-                connection_node = Node("Connection", **connection_attributes)
-                graph.create(connection_node)
-                connection_relationship = Relationship(crossing_node, "HAS_CONNECTION", connection_node)
-                graph.create(connection_relationship)
+            get_track_crossings(graph, crossing, track_node, _EPS)
 
         # track begin connections
         b_connection = track.xpath("rail:trackTopology/rail:trackBegin//rail:connection", namespaces=DEFAULT_NAMESPACE)
@@ -126,12 +97,14 @@ def import_railml():
             if len(_node):
                 get_track_elements(graph, _node[0], element['label'], "HAS_OCS_ELEMENT", track_node, _EPSG)
 
+    # remove doubles
     for connection in _CONNECTIONS:
         k,v = 'id', connection['ref']
         for i, item in enumerate(_CONNECTIONS):
             if v == item[k]:
                 _CONNECTIONS.pop(i)
 
+    # create connections between nodes
     for connection in _CONNECTIONS:
         selector = NodeSelector(graph)
         c1 = selector.select("Connection", id=connection["id"]).first()
